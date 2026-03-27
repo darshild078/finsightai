@@ -1,23 +1,14 @@
-"""
-FinSight AI - FastAPI Server
-=============================
-This is the main entry point for the FinSight AI backend.
+import sys
 
-Endpoints:
-- GET  /health   → Health check
-- POST /retrieve → Semantic retrieval from indexed document
-- POST /chat     → RAG-based Q&A with grounded answers
-- POST /upload   → Upload a PDF for session-scoped retrieval
+import core.retriever_pipeline as retriever_pipeline
+import core.corpus_manager as corpus_manager
+import core.cache_utils as cache_utils
+import core.metadata_schema as metadata_schema
 
-Run with:
-    uvicorn main:app --reload
-
-Then open:
-    http://localhost:8000/docs  (Swagger UI)
-
-Author: FinSight AI Team
-Stage: 8B (Multi-Corpus Routing)
-"""
+sys.modules['retriever_pipeline'] = retriever_pipeline
+sys.modules['corpus_manager'] = corpus_manager
+sys.modules['cache_utils'] = cache_utils
+sys.modules['metadata_schema'] = metadata_schema
 
 import os
 import time
