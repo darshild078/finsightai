@@ -8,9 +8,10 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { X, ChevronLeft, ChevronRight, ZoomIn, ZoomOut, ExternalLink } from 'lucide-react';
 import * as pdfjsLib from 'pdfjs-dist';
+import pdfjsWorker from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 
-// Point pdfjs to the worker — served from the public folder
-pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs';
+// Point pdfjs to the worker — imported from node_modules (Vite resolves via ?url)
+pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorker;
 
 const HIGHLIGHT_COLOR = 'rgba(212, 175, 55, 0.38)';
 const MIN_SCALE = 0.5;
@@ -21,6 +22,7 @@ export default function PDFViewerModal({ pdfUrl, pageNumber, chunkText, onClose 
     const canvasRef = useRef(null);
     const containerRef = useRef(null);
     const pdfRef = useRef(null);
+    const renderTaskRef = useRef(null);
 
     const [currentPage, setCurrentPage] = useState(pageNumber || 1);
     const [totalPages, setTotalPages] = useState(0);
@@ -74,7 +76,15 @@ export default function PDFViewerModal({ pdfUrl, pageNumber, chunkText, onClose 
         const canvas = canvasRef.current;
         if (!canvas) return;
 
+        // Cancel any in-progress render to avoid "Cannot use the same canvas
+        // during multiple render() operations" error
+        if (renderTaskRef.current) {
+            try { renderTaskRef.current.cancel(); } catch (_) { /* already done */ }
+            renderTaskRef.current = null;
+        }
+
         setLoading(true);
+        setError(null);
         try {
             const page = await pdfRef.current.getPage(currentPage);
             const viewport = page.getViewport({ scale });
@@ -88,8 +98,11 @@ export default function PDFViewerModal({ pdfUrl, pageNumber, chunkText, onClose 
             ctx.fillStyle = '#fff';
             ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-            // Render PDF page
-            await page.render({ canvasContext: ctx, viewport }).promise;
+            // Render PDF page — track the task so we can cancel it later
+            const task = page.render({ canvasContext: ctx, viewport });
+            renderTaskRef.current = task;
+            await task.promise;
+            renderTaskRef.current = null;
 
             // ── Highlight matching words ──────────────────────────
             if (highlightWords.length > 0) {
@@ -129,6 +142,8 @@ export default function PDFViewerModal({ pdfUrl, pageNumber, chunkText, onClose 
                 ctx.restore();
             }
         } catch (err) {
+            // Ignore cancellation errors (expected when navigating quickly)
+            if (err?.name === 'RenderingCancelledException') return;
             setError(`Render error: ${err.message}`);
         } finally {
             setLoading(false);

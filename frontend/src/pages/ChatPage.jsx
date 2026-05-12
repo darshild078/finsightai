@@ -92,6 +92,7 @@ export default function ChatPage() {
     } = useConversations();
 
     const [isLoading, setIsLoading] = useState(false);
+    const [lastQuery, setLastQuery] = useState('');
     const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
     const [backendDown, setBackendDown] = useState(false);
     const [bannerDismissed, setBannerDismissed] = useState(false);
@@ -153,6 +154,7 @@ export default function ChatPage() {
                 : null;
 
             addMessage(convId, 'user', question);
+            setLastQuery(question);
             setIsLoading(true);
 
             // Pass session_id if this chat has one
@@ -169,6 +171,8 @@ export default function ChatPage() {
                 addMessage(data.conversation_id || convId, 'assistant', data.answer, {
                     citations: data.citations || [],
                     evidence: data.evidence || [],
+                    pipeline: data.metadata || {},
+                    follow_ups: data.follow_ups || [],
                 });
             } catch (err) {
                 const errorMsg = err.message || 'Something went wrong. Is the backend running?';
@@ -327,6 +331,8 @@ export default function ChatPage() {
                             <MessageList
                                 messages={activeConversation.messages}
                                 isLoading={isLoading}
+                                lastQuery={lastQuery}
+                                onFollowUp={handleSend}
                             />
                             <ChatInput
                                 onSend={handleSend}
@@ -349,7 +355,7 @@ export default function ChatPage() {
                                     <h3>Suggested questions</h3>
                                     <div className="chat-prompt-cards">
                                         {[
-                                            { icon: <BarChart2 size={15} />, text: 'What is the revenue and profit trend?' },
+                                            { icon: <BarChart2 size={15} />, text: 'Compare TCS and Infosys revenue and profit' },
                                             { icon: <TrendingUp size={15} />, text: 'What are the key risk factors?' },
                                             { icon: <Users size={15} />, text: 'Who are the promoters and their shareholding?' },
                                             { icon: <DollarSign size={15} />, text: 'Summarise the financial highlights' },

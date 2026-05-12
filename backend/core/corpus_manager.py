@@ -307,16 +307,18 @@ class CorpusManager:
 
             chunk = self.retriever.chunks[vector_id]
 
-            # Resolve PDF path relative to the data/ dir so the static /pdfs/
-            # route can serve it correctly (e.g. "ADANIPORTS/2025.pdf")
+            # Resolve PDF path for the static /pdfs/ route.
+            # pdf_path may be a Colab path (e.g. /content/drive/MyDrive/data/ADANIPORTS/2023.pdf)
+            # so we extract the last 2 segments (COMPANY/YEAR.pdf) which matches
+            # the local data/ directory structure and the /pdfs/ static mount.
             pdf_filename = ""
             for rec in self.documents.values():
                 if rec.vector_id_start <= vector_id < rec.vector_id_end:
-                    data_dir = os.path.join(
-                        os.path.dirname(os.path.abspath(__file__)), "data"
-                    )
-                    rel = os.path.relpath(rec.pdf_path, data_dir)
-                    pdf_filename = rel.replace("\\", "/")  # forward slashes for URL
+                    parts = rec.pdf_path.replace("\\", "/").rstrip("/").split("/")
+                    if len(parts) >= 2:
+                        pdf_filename = f"{parts[-2]}/{parts[-1]}"
+                    else:
+                        pdf_filename = parts[-1] if parts else ""
                     break
 
             results.append(RetrievalResult(

@@ -6,7 +6,8 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
-import { getConversations, getConversation, deleteConversationApi } from '../api';
+import { getConversations, getConversation, deleteConversationApi, renameConversationApi } from '../api';
+import { getToken } from '../utils/auth';
 
 export default function useConversations() {
     const [conversations, setConversations] = useState([]);
@@ -16,6 +17,9 @@ export default function useConversations() {
 
     // ── Load conversation list from backend on mount ──────────
     const refreshConversations = useCallback(async () => {
+        const token = getToken();
+        if (!token) return;           // skip if not logged in yet
+
         setIsLoadingConversations(true);
         try {
             const data = await getConversations(1, 50);
@@ -136,14 +140,21 @@ export default function useConversations() {
         }
     }, [activeId]);
 
-    // ── Rename a conversation (local only) ───────────────────
-    const renameConversation = useCallback((id, title) => {
+    // ── Rename a conversation (optimistic + persist) ─────────
+    const renameConversation = useCallback(async (id, title) => {
+        // Optimistic local update
         setConversations((prev) =>
             prev.map((c) => (c.id === id ? { ...c, title } : c))
         );
         setActiveConversation((prev) =>
             prev && prev.id === id ? { ...prev, title } : prev
         );
+        // Persist to backend
+        try {
+            await renameConversationApi(id, title);
+        } catch (err) {
+            console.error('Failed to persist rename:', err);
+        }
     }, []);
 
     return {

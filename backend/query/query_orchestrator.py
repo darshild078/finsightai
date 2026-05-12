@@ -184,12 +184,25 @@ def _bm25_to_retrieval_results(
         meta = corpus_manager.chunk_metadata.get(vector_id)
         doc_label = meta.document_label if meta else "unknown"
 
+        # Resolve PDF path for the /pdfs/ static route (mirrors corpus_manager.search()).
+        # pdf_path may be a Colab path, so extract last 2 segments (COMPANY/YEAR.pdf).
+        pdf_filename = ""
+        for rec in corpus_manager.documents.values():
+            if rec.vector_id_start <= vector_id < rec.vector_id_end:
+                parts = rec.pdf_path.replace("\\", "/").rstrip("/").split("/")
+                if len(parts) >= 2:
+                    pdf_filename = f"{parts[-2]}/{parts[-1]}"
+                else:
+                    pdf_filename = parts[-1] if parts else ""
+                break
+
         result = RetrievalResult(
             chunk_id=chunk.chunk_id,
             score=score,
             snippet=chunk.text,
             document_label=doc_label,
             page_number=chunk.page_number,
+            pdf_filename=pdf_filename,
         )
         results.append(result)
 

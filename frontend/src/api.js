@@ -169,3 +169,17 @@ export async function deleteConversationApi(id) {
     }
     return response.json();
 }
+
+export async function renameConversationApi(id, title) {
+    const response = await fetch(`${API_BASE}/conversations/${id}`, {
+        method: "PATCH",
+        headers: authHeaders(),
+        body: JSON.stringify({ title }),
+    });
+    handle401(response);
+    if (!response.ok) {
+        const err = await response.json().catch(() => null);
+        throw new Error(err?.detail || `Failed to rename conversation (${response.status})`);
+    }
+    return response.json();
+}

@@ -15,6 +15,7 @@ import bcrypt
 from jose import jwt, JWTError, ExpiredSignatureError
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from authlib.integrations.starlette_client import OAuth
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -29,6 +30,19 @@ JWT_EXPIRY_HOURS = 24
 
 # FastAPI security scheme — expects "Authorization: Bearer <token>"
 _bearer_scheme = HTTPBearer()
+
+# ---------------------------------------------------------------------------
+# Google OAuth (Authlib)
+# ---------------------------------------------------------------------------
+
+oauth = OAuth()
+oauth.register(
+    name="google",
+    client_id=os.getenv("GOOGLE_CLIENT_ID", ""),
+    client_secret=os.getenv("GOOGLE_CLIENT_SECRET", ""),
+    server_metadata_url="https://accounts.google.com/.well-known/openid-configuration",
+    client_kwargs={"scope": "openid email profile"},
+)
 
 
 # ---------------------------------------------------------------------------

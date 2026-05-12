@@ -50,9 +50,16 @@ export function AuthProvider({ children }) {
         setIsAuthenticated(false);
     }, []);
 
+    // Login with an existing token (used by Google OAuth callback)
+    const loginWithToken = useCallback((token, userData) => {
+        saveSession(userData, token);
+        setUser(userData);
+        setIsAuthenticated(true);
+    }, []);
+
     return (
         <AuthContext.Provider
-            value={{ user, isAuthenticated, isLoading, login, register, logout }}
+            value={{ user, isAuthenticated, isLoading, login, register, logout, loginWithToken }}
         >
             {children}
         </AuthContext.Provider>

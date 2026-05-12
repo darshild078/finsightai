@@ -11,6 +11,7 @@ sys.modules['cache_utils'] = cache_utils
 sys.modules['metadata_schema'] = metadata_schema
 
 import os
+import re
 import time
 import shutil
 import logging
@@ -24,6 +25,7 @@ from datetime import datetime, timezone
 from fastapi import FastAPI, HTTPException, UploadFile, File, Form, Depends, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from starlette.middleware.sessions import SessionMiddleware
 from pydantic import BaseModel, Field, EmailStr
 
 # Auth + Database
@@ -56,6 +58,13 @@ from query.search_plan_builder import build_plan
 
 # Stage 8B: Multi-corpus routing
 from core.corpus_router import CorpusRouter
+
+# Conversation persistence
+from routers.conversations import (
+    router as conversations_router,
+    create_conversation as db_create_conversation,
+    append_to_conversation as db_append_to_conversation,
+)
 
 # Phase 1: Retrieval observability
 from core.retrieval_logger import log_no_context_event
@@ -90,6 +99,21 @@ from dotenv import load_dotenv
 
 # Load environment variables
 load_dotenv()
+
+
+# =============================================================================
+# FOLLOW-UP QUESTION EXTRACTION
+# =============================================================================
+
+def extract_follow_ups(answer: str):
+    """
+    Split [FOLLOW_UP]: lines from the LLM answer.
+    Returns (clean_answer, list_of_follow_up_questions).
+    """
+    pattern = r'\[FOLLOW_UP\]:\s*(.+?)(?=\n|$)'
+    follow_ups = re.findall(pattern, answer)
+    clean_answer = re.sub(r'\n*\[FOLLOW_UP\]:\s*.+', '', answer).strip()
+    return clean_answer, follow_ups[:3]
 
 
 # =============================================================================
@@ -230,6 +254,9 @@ class ChatResponse(BaseModel):
     answer: str = Field(description="The generated answer grounded in document evidence")
     citations: List[str] = Field(description="Chunk IDs cited in the answer")
     evidence: List[EvidenceItem] = Field(description="Evidence chunks used to generate the answer")
+    conversation_id: Optional[str] = Field(default=None, description="MongoDB conversation ID for persistence")
+    metadata: dict = Field(default_factory=dict, description="Pipeline metadata: confidence, latency, intent, sources")
+    follow_ups: List[str] = Field(default_factory=list, description="Suggested follow-up questions")
 
 
 
@@ -409,14 +436,28 @@ This API provides semantic search and AI-powered Q&A over Indian financial docum
 )
 
 # Add CORS middleware (allows frontend to call this API)
-# For Phase 1 we allow all origins (demo purposes)
+# Set ALLOWED_ORIGINS in production to restrict access
+_allowed_origins = os.getenv("ALLOWED_ORIGINS", "http://localhost:5173").split(",")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # In production, restrict this!
+    allow_origins=_allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Session middleware — required by Authlib for OAuth state (CSRF protection)
+app.add_middleware(
+    SessionMiddleware,
+    secret_key=os.getenv("JWT_SECRET", "change-me-to-a-strong-random-secret"),
+)
+
+# Google OAuth router
+from routers.google_auth import router as google_auth_router
+
+# Conversations router (user-scoped CRUD)
+app.include_router(conversations_router)
+app.include_router(google_auth_router)
 
 # Serve source PDFs at /pdfs/<filename> so the frontend "Open PDF" link works.
 # Falls back gracefully if the data directory doesn't exist.
@@ -703,6 +744,20 @@ def chat(request: ChatRequest, current_user: dict = Depends(get_current_user)):
     # Get top_k
     top_k = request.top_k if request.top_k is not None else int(os.getenv("TOP_K", 5))
 
+    # --- Response cache: return instantly for repeated queries ---
+    cached = response_cache.get(request.question, request.session_id)
+    if cached:
+        print(f"⚡ Cache HIT for: '{request.question[:60]}...'")
+        cached_metadata = cached.get("metadata", {})
+        return ChatResponse(
+            answer=cached.get("answer", ""),
+            citations=cached.get("citations", []),
+            evidence=[EvidenceItem(**e) for e in cached.get("evidence", [])],
+            conversation_id=cached.get("conversation_id"),
+            metadata={**cached_metadata, "cached": True},
+            follow_ups=cached.get("follow_ups", []),
+        )
+
     try:
         if request.session_id is not None:
             # Session path: build plan manually, route through corpus_router
@@ -786,10 +841,16 @@ def chat(request: ChatRequest, current_user: dict = Depends(get_current_user)):
 
         # STEP 4: Generate answer via OpenAI
         print(f"🤖 Generating answer with {llm_client.model}...")
-        answer = llm_client.generate(system_prompt, user_message)
+        raw_answer = llm_client.generate(system_prompt, user_message)
+
+        # STEP 4b: Extract follow-up suggestions from LLM output
+        answer, follow_ups = extract_follow_ups(raw_answer)
 
         # STEP 5: Extract citations from the answer
         citations = extract_citations(answer, chunk_ids)
+
+        # STEP 5b: Compute confidence score
+        confidence, conf_label = compute_confidence(results, answer, request.question, citations)
 
         # STEP 6: Build evidence list (with full source citation info)
         evidence = [
@@ -816,11 +877,72 @@ def chat(request: ChatRequest, current_user: dict = Depends(get_current_user)):
             f"latency={total_ms:.0f}ms)"
         )
 
-        return ChatResponse(
+        # --- Persist conversation to MongoDB ---
+        now_iso = datetime.now(timezone.utc).isoformat()
+        user_msg = {
+            "role": "user",
+            "content": request.question,
+            "metadata": {},
+            "timestamp": now_iso,
+        }
+        assistant_msg = {
+            "role": "assistant",
+            "content": answer,
+            "metadata": {
+                "citations": citations,
+                "evidence": [e.model_dump() for e in evidence],
+            },
+            "timestamp": now_iso,
+        }
+
+        conv_id = request.conversation_id
+        try:
+            if conv_id:
+                # Append to existing conversation
+                db_append_to_conversation(conv_id, user_id, user_msg, assistant_msg)
+            else:
+                # Create new conversation (title = first 60 chars of question)
+                title = request.question[:60] + ("..." if len(request.question) > 60 else "")
+                conv_id = db_create_conversation(user_id, title, user_msg, assistant_msg)
+        except Exception as persist_err:
+            # Don't fail the request if persistence fails — log and continue
+            print(f"⚠️  Conversation persistence error: {persist_err}")
+
+        pipeline_metadata = {
+            "confidence": confidence,
+            "confidence_label": conf_label,
+            "intent": intent,
+            "latency_ms": round(total_ms),
+            "latency_breakdown": breakdown,
+            "sources_used": len(results),
+            "top_score": round(top_score, 3),
+            "cached": False,
+            "model": llm_client.model,
+        }
+
+        response_data = ChatResponse(
             answer=answer,
             citations=citations,
-            evidence=evidence
+            evidence=evidence,
+            conversation_id=conv_id,
+            metadata=pipeline_metadata,
+            follow_ups=follow_ups,
         )
+
+        # --- Cache the successful response ---
+        response_cache.set(
+            request.question,
+            {
+                "answer": answer,
+                "citations": citations,
+                "evidence": [e.model_dump() for e in evidence],
+                "metadata": pipeline_metadata,
+                "follow_ups": follow_ups,
+            },
+            request.session_id,
+        )
+
+        return response_data
 
     except KeyError as e:
         raise HTTPException(status_code=404, detail=str(e))

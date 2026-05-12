@@ -110,7 +110,7 @@ class OpenAIClient:
                     {"role": "user", "content": user_message}
                 ],
                 temperature=0,       # Deterministic — no hallucination
-                max_tokens=1024,     # Enough for a detailed answer
+                max_tokens=1000,     # Balanced: structured output without excess latency
             )
             
             # Extract the response text

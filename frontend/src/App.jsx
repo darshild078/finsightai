@@ -11,6 +11,7 @@ import LandingPage from './pages/LandingPage';
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
 import ChatPage from './pages/ChatPage';
+import AuthCallbackPage from './pages/AuthCallbackPage';
 import ProtectedRoute from './components/shared/ProtectedRoute';
 import "./App.css";
 
@@ -34,6 +35,9 @@ function AnimatedRoutes() {
           <PageTransition>
             <RegisterPage />
           </PageTransition>
+        } />
+        <Route path="/auth/callback" element={
+          <AuthCallbackPage />
         } />
         <Route path="/chat" element={
           <ProtectedRoute>
