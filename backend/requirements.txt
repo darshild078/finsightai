@@ -1,34 +1,77 @@
-# FinSight AI - Phase 1 + Phase 2 + Phase 3 Dependencies
-# Install with: pip install -r requirements.txt
-
-# Web Framework
-fastapi>=0.104.0
-uvicorn>=0.24.0
-
-# PDF Processing
-pymupdf>=1.23.0
-
-# Embeddings & Vector Search
-sentence-transformers>=2.2.0
-faiss-cpu>=1.7.4
-
-# LLM Generation (Phase 2)
-openai>=1.0.0
-
-# Sparse Retrieval (Phase 3: Hybrid Search)
-rank-bm25>=0.2.2
-
-# Configuration
-python-dotenv>=1.0.0
-python-multipart
-
-# Auth + Database
-pymongo>=4.6.0
-bcrypt>=4.1.0
-python-jose[cryptography]>=3.3.0
-email-validator>=2.1.0
-
-# Google OAuth
-authlib>=1.3.0
-httpx>=0.27.0
-itsdangerous>=2.1.0
+annotated-doc==0.0.4
+annotated-types==0.7.0
+anyio==4.12.1
+Authlib==1.7.0
+bcrypt==5.0.0
+certifi==2026.2.25
+cffi==2.0.0
+charset-normalizer==3.4.7
+click==8.3.1
+colorama==0.4.6
+cryptography==46.0.7
+distro==1.9.0
+dnspython==2.8.0
+ecdsa==0.19.2
+email-validator==2.3.0
+faiss-cpu==1.13.2
+fastapi==0.133.1
+filelock==3.24.3
+fsspec==2026.2.0
+h11==0.16.0
+hf-xet==1.3.1
+httpcore==1.0.9
+httpx==0.28.1
+huggingface_hub==1.4.1
+idna==3.11
+itsdangerous==2.2.0
+Jinja2==3.1.6
+jiter==0.13.0
+joblib==1.5.3
+joserfc==1.6.4
+markdown-it-py==4.0.0
+MarkupSafe==3.0.3
+mdurl==0.1.2
+motor==3.7.1
+mpmath==1.3.0
+networkx==3.6.1
+numpy==2.4.2
+openai==2.24.0
+packaging==26.0
+pyasn1==0.6.3
+pycparser==3.0
+pydantic==2.12.5
+pydantic_core==2.41.5
+Pygments==2.19.2
+PyJWT==2.12.1
+pymongo==4.17.0
+PyMuPDF==1.27.1
+python-dotenv==1.2.1
+python-jose==3.5.0
+python-multipart==0.0.22
+PyYAML==6.0.3
+rank-bm25==0.2.2
+regex==2026.2.19
+requests==2.34.0
+rich==14.3.3
+rsa==4.9.1
+safetensors==0.7.0
+scikit-learn==1.8.0
+scipy==1.17.1
+sentence-transformers==5.2.3
+setuptools==82.0.0
+shellingham==1.5.4
+six==1.17.0
+sniffio==1.3.1
+starlette==0.52.1
+sympy==1.14.0
+threadpoolctl==3.6.0
+tokenizers==0.22.2
+torch==2.10.0
+tqdm==4.67.3
+transformers==5.2.0
+typer==0.24.1
+typer-slim==0.24.0
+typing-inspection==0.4.2
+typing_extensions==4.15.0
+urllib3==2.7.0
+uvicorn==0.41.0
